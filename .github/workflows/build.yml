@@ -1,4 +1,4 @@
-name: Build and Deploy
+name: Build APK
 
 on:
   push:
@@ -18,41 +18,39 @@ jobs:
           rm -rf project && mkdir project
           unzip -o update.zip -d project
           inner=$(ls project)
-          if [ "$(echo "$inner" | wc -l)" -eq 1 ] && [ -d "project/$inner" ]; then
+          if [ "$(echo "$inner" | wc -l)" -eq 1 ] && [ -d "project/$inner" ] && [ "$inner" != "app" ]; then
             mv "project/$inner"/* project/
             rmdir "project/$inner"
           fi
-          ls -la project
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Deploy Firebase backend
-        if: hashFiles('project/firebase.json') != ''
-        env:
-          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
-          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
-          cd project/functions && npm install && cd ..
-          npx firebase-tools@latest deploy --only firestore:rules,firestore:indexes,functions --project amaresports-25028 --non-interactive
-          rm -f "$RUNNER_TEMP/sa.json"
+          ls -la project project/app
 
       - uses: actions/setup-java@v4
-        if: hashFiles('project/app/pubspec.yaml') != ''
         with:
           distribution: temurin
           java-version: 17
 
       - uses: subosito/flutter-action@v2
-        if: hashFiles('project/app/pubspec.yaml') != ''
         with:
           channel: stable
 
-      - name: Build Android APK
-        if: hashFiles('project/app/pubspec.yaml') != ''
+      - name: Add Android scaffold
+        working-directory: project/app
+        run: |
+          flutter create --platforms=android --org com.amaresports --project-name amar_esports ../_scaffold
+          cp -r ../_scaffold/android ./android
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' "$M"
+          sed -i 's#android:label="[^"]*"#android:label="Amar Esports"#' "$M"
+          grep -n "INTERNET\|android:label" "$M"
+
+      - name: Build APK
         working-directory: project/app
         run: |
           flutter pub get
           flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: amar-esports-apk
+          path: project/app/build/app/outputs/flutter-apk/app-release.apk

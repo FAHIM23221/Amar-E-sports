@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APKs
 
 on:
   push:
@@ -17,12 +17,7 @@ jobs:
           shopt -s dotglob
           rm -rf project && mkdir project
           unzip -o update.zip -d project
-          inner=$(ls project)
-          if [ "$(echo "$inner" | wc -l)" -eq 1 ] && [ -d "project/$inner" ] && [ "$inner" != "app" ]; then
-            mv "project/$inner"/* project/
-            rmdir "project/$inner"
-          fi
-          ls -la project project/app
+          ls -la project
 
       - uses: actions/setup-java@v4
         with:
@@ -33,24 +28,36 @@ jobs:
         with:
           channel: stable
 
-      - name: Add Android scaffold
-        working-directory: project/app
+      - name: Build user and admin apps
         run: |
-          flutter create --platforms=android --org com.amaresports --project-name amar_esports ../_scaffold
-          cp -r ../_scaffold/android ./android
-          M=android/app/src/main/AndroidManifest.xml
-          sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' "$M"
-          sed -i 's#android:label="[^"]*"#android:label="Amar Esports"#' "$M"
-          grep -n "INTERNET\|android:label" "$M"
+          set -e
+          for APP in app admin_app; do
+            if [ -f "project/$APP/pubspec.yaml" ]; then
+              NAME=$(grep '^name:' "project/$APP/pubspec.yaml" | awk '{print $2}')
+              if [ "$APP" = "admin_app" ]; then LABEL="Amar Esports Admin"; else LABEL="Amar Esports"; fi
+              echo "=== Building $APP ($NAME) ==="
+              cd "project/$APP"
+              flutter create --platforms=android --org com.amaresports --project-name "$NAME" "../_scaffold_$APP"
+              cp -r "../_scaffold_$APP/android" ./android
+              M=android/app/src/main/AndroidManifest.xml
+              sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' "$M"
+              sed -i "s#android:label=\"[^\"]*\"#android:label=\"$LABEL\"#" "$M"
+              flutter pub get
+              flutter build apk --release
+              cd ../..
+            fi
+          done
 
-      - name: Build APK
-        working-directory: project/app
-        run: |
-          flutter pub get
-          flutter build apk --release
-
-      - name: Upload APK
+      - name: Upload user APK
         uses: actions/upload-artifact@v4
         with:
-          name: amar-esports-apk
+          name: amar-esports-user-apk
           path: project/app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: ignore
+
+      - name: Upload admin APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: amar-esports-admin-apk
+          path: project/admin_app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: ignore

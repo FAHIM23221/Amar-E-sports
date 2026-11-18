@@ -39,6 +39,7 @@ jobs:
               cd "project/$APP"
               flutter create --platforms=android --org com.amaresports --project-name "$NAME" "../_scaffold_$APP"
               cp -r "../_scaffold_$APP/android" ./android
+              if [ -d android_icons ]; then cp -r android_icons/. android/app/src/main/res/; fi
               M=android/app/src/main/AndroidManifest.xml
               sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' "$M"
               sed -i "s#android:label=\"[^\"]*\"#android:label=\"$LABEL\"#" "$M"
